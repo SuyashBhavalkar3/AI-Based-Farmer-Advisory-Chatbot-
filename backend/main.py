@@ -126,6 +126,29 @@ def ask_advisory(
         db.refresh(user_message)
         logger.info(f"[ADVISORY] User message saved with ID {user_message.id}")
         
+        # Step 1.5: Generate conversation title if needed
+        logger.info(f"[ADVISORY] Checking if title generation needed...")
+        from database.models import Conversation
+        from utils.title_generator import should_generate_title, generate_conversation_title
+        
+        conversation = db.query(Conversation).filter(
+            Conversation.id == request.conversation_id
+        ).first()
+        
+        if conversation and should_generate_title(conversation.title):
+            try:
+                logger.info(f"[ADVISORY] Generating title for conversation {request.conversation_id}...")
+                new_title = generate_conversation_title(request.question)
+                conversation.title = new_title
+                db.add(conversation)
+                db.commit()
+                db.refresh(conversation)
+                logger.info(f"[ADVISORY] Conversation title updated to: {new_title}")
+            except Exception as e:
+                logger.warning(f"[ADVISORY] Title generation failed: {str(e)}, continuing without title")
+        else:
+            logger.info(f"[ADVISORY] Skipping title generation (title already set or conversation not found)")
+        
         # Detect language if not specified
         if not request.language:
             request.language = LanguageDetector.detect(request.question)
