@@ -136,3 +136,79 @@ class SchemeDocument(Base):
     __table_args__ = (
         Index('idx_scheme_document_scheme', 'scheme_id', 'document_name'),
     )
+
+
+class FarmerProfile(Base):
+    """Farmer profile for personalized recommendations."""
+    __tablename__ = "farmer_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    state = Column(String(100), nullable=True)
+    district = Column(String(100), nullable=True)
+    land_size_hectares = Column(Integer, nullable=True)  # In hectares
+    primary_crop = Column(String(100), nullable=True)
+    secondary_crops = Column(String(500), nullable=True)  # Comma-separated
+    farming_type = Column(String(50), nullable=True)  # organic, conventional, mixed
+    annual_income = Column(Integer, nullable=True)
+    dbt_eligible = Column(Boolean, default=False)
+    bank_account_linked = Column(Boolean, default=False)
+    aadhar_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('idx_farmer_profile_state_district', 'state', 'district'),
+    )
+
+
+class ConversationSummary(Base):
+    """AI-generated summaries of conversations for memory and insights."""
+    __tablename__ = "conversation_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), unique=True, nullable=False, index=True)
+    summary = Column(Text, nullable=False)
+    key_topics = Column(String(1000), nullable=True)  # JSON list of topics
+    schemes_discussed = Column(String(1000), nullable=True)  # JSON list of scheme IDs
+    generated_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index('idx_summary_conversation', 'conversation_id'),
+    )
+
+
+class SourceCitation(Base):
+    """Track sources/documents cited in responses for transparency."""
+    __tablename__ = "source_citations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False, index=True)
+    source_text = Column(Text, nullable=False)
+    document_name = Column(String(255), nullable=True)
+    confidence_score = Column(Integer, nullable=True)  # 0-100
+    vector_similarity = Column(Integer, nullable=True)  # 0-100
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index('idx_citation_message', 'message_id'),
+    )
+
+
+class UserInsight(Base):
+    """Analytics and insights about user interactions."""
+    __tablename__ = "user_insights"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    total_conversations = Column(Integer, default=0)
+    total_messages = Column(Integer, default=0)
+    most_asked_scheme = Column(String(255), nullable=True)
+    primary_interest = Column(String(100), nullable=True)  # crop_advisory, schemes, legal, etc.
+    preferred_language = Column(String(5), nullable=True)
+    last_active = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('idx_insight_user', 'user_id'),
+    )

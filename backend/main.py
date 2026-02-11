@@ -19,6 +19,7 @@ from middleware import LoggingMiddleware, ErrorHandlingMiddleware, RateLimitMidd
 # Import routers
 from auth.routes import router as auth_router
 from conversations.routes import router as conversations_router
+from smart_features_routes import router as smart_features_router
 
 # Import services
 from rag.rag_service import get_rag_service
@@ -71,6 +72,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router)
 app.include_router(conversations_router)
+app.include_router(smart_features_router)
 
 # Request schemas
 class AdvisoryRequest(BaseModel):
@@ -167,10 +169,29 @@ def ask_advisory(
         context = rag_service.get_context_string(question_en, language=request.language)
         logger.info(f"[ADVISORY] RAG context length: {len(context) if context else 0}")
         
-        # Get advisory
-        logger.info(f"[ADVISORY] Calling FarmerAdvisoryService...")
+        # Get conversation context from previous messages
+        logger.info(f"[ADVISORY] Retrieving conversation history...")
+        from services.conversation_intelligence import ConversationIntelligenceService
+        intelligence_service = ConversationIntelligenceService()
+        conversation_context = intelligence_service.get_conversation_context(
+            db, request.conversation_id, exclude_current_message=True
+        )
+        logger.info(f"[ADVISORY] Conversation context length: {len(conversation_context) if conversation_context else 0}")
+        
+        # Format combined context for prompt
+        combined_context = intelligence_service.format_context_for_prompt(
+            conversation_context, context
+        )
+        logger.info(f"[ADVISORY] Combined context prepared")
+        
+        # Get advisory with conversation context
+        logger.info(f"[ADVISORY] Calling FarmerAdvisoryService with conversation context...")
         advisory_service = FarmerAdvisoryService()
-        response = advisory_service.get_advisory(question_en, language=request.language, context=context)
+        response = advisory_service.get_advisory(
+            question_en, 
+            language=request.language, 
+            context=combined_context
+        )
         logger.info(f"[ADVISORY] Got response from service")
         
         # Translate response back to user's language
