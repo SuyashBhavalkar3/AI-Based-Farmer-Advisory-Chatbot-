@@ -237,4 +237,29 @@ export interface AdvisoryResponse {
   schemes?: unknown[];
 }
 
-export default apiClient;
+// ============================================
+// Schemes API Methods
+// ============================================
+
+export const schemesAPI = {
+  list: async (limit: number = 50, offset: number = 0) => {
+    const query = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+    return apiClient.get(`/api/v1/schemes?${query.toString()}`);
+  },
+
+  get: async (schemeId: number) => {
+    return apiClient.get(`/api/v1/schemes/${schemeId}`);
+  },
+
+  getDocuments: async (schemeId: number) => {
+    return apiClient.get(`/api/v1/schemes/${schemeId}/documents`);
+  },
+
+  downloadDocument: async (documentId: number) => {
+    return apiClient.get(`/api/v1/schemes/documents/${documentId}/download`);
+  },
+};
+

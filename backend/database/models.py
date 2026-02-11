@@ -95,3 +95,44 @@ class VectorMetadata(Base):
     __table_args__ = (
         Index('idx_vector_document_chunk', 'document_id', 'chunk_index'),
     )
+
+class Scheme(Base):
+    """Government schemes and subsidies."""
+    __tablename__ = "schemes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    eligibility = Column(Text, nullable=True)
+    benefits = Column(Text, nullable=True)
+    application_process = Column(Text, nullable=True)
+    scheme_type = Column(String(100), default="subsidy")  # subsidy, insurance, credit, etc.
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    documents = relationship("SchemeDocument", back_populates="scheme", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_scheme_name', 'name'),
+        Index('idx_scheme_type', 'scheme_type'),
+    )
+
+
+class SchemeDocument(Base):
+    """Documents required for government schemes."""
+    __tablename__ = "scheme_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scheme_id = Column(Integer, ForeignKey("schemes.id"), nullable=False, index=True)
+    document_name = Column(String(255), nullable=False)
+    file_path = Column(String(512), nullable=True)  # Local file path
+    file_url = Column(String(512), nullable=True)  # External URL
+    document_type = Column(String(50))  # pdf, docx, image, etc.
+    file_size = Column(Integer)  # in bytes
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    scheme = relationship("Scheme", back_populates="documents")
+
+    __table_args__ = (
+        Index('idx_scheme_document_scheme', 'scheme_id', 'document_name'),
+    )

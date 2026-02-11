@@ -2,6 +2,7 @@
 
 import os
 from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form, Depends
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -279,6 +280,172 @@ def get_scheme(scheme_id: str):
     except Exception as e:
         logger.error(f"Error getting scheme: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get scheme")
+
+
+# ============================================
+# SCHEMES ENDPOINTS
+# ============================================
+
+@app.get("/api/v1/schemes")
+def get_schemes(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """Get list of all government schemes."""
+    try:
+        logger.info(f"[SCHEMES] Fetching schemes list - limit: {limit}, offset: {offset}")
+        from database.models import Scheme
+        
+        schemes = db.query(Scheme).offset(offset).limit(limit).all()
+        total = db.query(Scheme).count()
+        
+        schemes_data = [
+            {
+                "id": s.id,
+                "name": s.name,
+                "description": s.description[:200] if s.description else "",
+                "scheme_type": s.scheme_type,
+                "created_at": s.created_at.isoformat() if s.created_at else None
+            }
+            for s in schemes
+        ]
+        
+        logger.info(f"[SCHEMES] Retrieved {len(schemes_data)} schemes")
+        return format_success_response({
+            "schemes": schemes_data,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        })
+    except Exception as e:
+        logger.error(f"[SCHEMES] Error fetching schemes: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch schemes")
+
+
+@app.get("/api/v1/schemes/{scheme_id}")
+def get_scheme_details(
+    scheme_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get detailed information about a specific scheme."""
+    try:
+        logger.info(f"[SCHEMES] Fetching scheme details - ID: {scheme_id}")
+        from database.models import Scheme
+        
+        scheme = db.query(Scheme).filter(Scheme.id == scheme_id).first()
+        
+        if not scheme:
+            logger.warning(f"[SCHEMES] Scheme not found - ID: {scheme_id}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scheme not found")
+        
+        # Get related documents
+        documents = [
+            {
+                "id": doc.id,
+                "name": doc.document_name,
+                "type": doc.document_type,
+                "size": doc.file_size,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None
+            }
+            for doc in scheme.documents
+        ]
+        
+        scheme_data = {
+            "id": scheme.id,
+            "name": scheme.name,
+            "description": scheme.description,
+            "eligibility": scheme.eligibility,
+            "benefits": scheme.benefits,
+            "application_process": scheme.application_process,
+            "scheme_type": scheme.scheme_type,
+            "documents": documents,
+            "created_at": scheme.created_at.isoformat() if scheme.created_at else None
+        }
+        
+        logger.info(f"[SCHEMES] Retrieved scheme details - {scheme.name}")
+        return format_success_response(scheme_data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SCHEMES] Error fetching scheme details: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch scheme details")
+
+
+@app.get("/api/v1/schemes/{scheme_id}/documents")
+def get_scheme_documents(
+    scheme_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get all documents required for a scheme."""
+    try:
+        logger.info(f"[SCHEMES] Fetching documents for scheme - ID: {scheme_id}")
+        from database.models import Scheme
+        
+        scheme = db.query(Scheme).filter(Scheme.id == scheme_id).first()
+        
+        if not scheme:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scheme not found")
+        
+        documents = [
+            {
+                "id": doc.id,
+                "name": doc.document_name,
+                "type": doc.document_type,
+                "size": doc.file_size,
+                "has_file": doc.file_path is not None,
+                "has_url": doc.file_url is not None,
+                "url": doc.file_url
+            }
+            for doc in scheme.documents
+        ]
+        
+        logger.info(f"[SCHEMES] Retrieved {len(documents)} documents for scheme {scheme_id}")
+        return format_success_response({"documents": documents})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SCHEMES] Error fetching documents: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch documents")
+
+
+@app.get("/api/v1/schemes/documents/{document_id}/download")
+def download_scheme_document(
+    document_id: int,
+    db: Session = Depends(get_db)
+):
+    """Download a scheme document."""
+    try:
+        logger.info(f"[SCHEMES] Download request for document - ID: {document_id}")
+        from database.models import SchemeDocument
+        
+        document = db.query(SchemeDocument).filter(SchemeDocument.id == document_id).first()
+        
+        if not document:
+            logger.warning(f"[SCHEMES] Document not found - ID: {document_id}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        
+        # If external URL, return redirect URL in JSON
+        if document.file_url:
+            logger.info(f"[SCHEMES] Returning redirect URL for external resource")
+            return format_success_response({"redirect_url": document.file_url})
+        
+        # If local file
+        if document.file_path and os.path.exists(document.file_path):
+            logger.info(f"[SCHEMES] Serving file - {document.file_path}")
+            return FileResponse(
+                path=document.file_path,
+                filename=document.document_name,
+                media_type="application/octet-stream"
+            )
+        
+        logger.warning(f"[SCHEMES] File not found - {document.file_path}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[SCHEMES] Error downloading document: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to download document")
 
 # Legacy endpoints removed - see conversation routes for conversation management
 

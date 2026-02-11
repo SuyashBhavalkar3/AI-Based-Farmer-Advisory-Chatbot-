@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Plus, MessageSquare, LogOut } from "lucide-react";
+import { Plus, MessageSquare, LogOut, Wheat } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -106,7 +107,13 @@ export function ChatSidebar({
             <SelectItem value="mr">मराठी (Marathi)</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground" onClick={signOut}>
+        <Link to="/schemes" className="w-full">
+          <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:bg-green-50 dark:hover:bg-emerald-900/30 hover:text-green-700 dark:hover:text-green-400 transition-colors">
+            <Wheat className="h-4 w-4" />
+            Schemes
+          </Button>
+        </Link>
+        <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-400 transition-colors" onClick={signOut}>
           <LogOut className="h-4 w-4" />
           Sign Out
         </Button>
