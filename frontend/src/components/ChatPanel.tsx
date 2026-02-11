@@ -219,35 +219,38 @@ export function ChatPanel({ conversationId, language, onConversationCreated }: C
   // Empty state - no conversation
   if (!conversationId && messages.length === 0) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-            <Leaf className="h-8 w-8 text-primary" />
+      <div className="flex h-full flex-col bg-gradient-to-b from-white/50 to-green-50/30 dark:from-slate-900/50 dark:to-emerald-900/20">
+        <div className="flex flex-1 flex-col items-center justify-center gap-8 p-8">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-2xl">
+            <Leaf className="h-10 w-10 text-white" />
           </div>
-          <div className="text-center">
-            <h2 className="text-xl font-semibold text-foreground">
+          <div className="text-center max-w-md">
+            <h2 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
               Farmer Legal & Policy Assistant
             </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-3 text-base text-gray-600 dark:text-gray-300 leading-relaxed">
               Ask about government schemes, crop insurance, subsidies, and land laws
             </p>
           </div>
-          <div className="grid w-full max-w-lg gap-2">
-            {STARTER_QUESTIONS.map((q) => (
+          <div className="grid w-full max-w-lg gap-3">
+            {STARTER_QUESTIONS.map((q, idx) => (
               <button
                 key={q}
                 onClick={() => {
                   setInput(q);
                 }}
-                className="rounded-lg border border-border bg-card p-3 text-left text-sm text-card-foreground transition-colors hover:bg-accent"
+                className="group rounded-xl border-2 border-green-200 dark:border-emerald-800 bg-white dark:bg-slate-800/50 p-4 text-left text-sm font-medium text-gray-800 dark:text-gray-200 transition-all hover:border-green-500 hover:bg-green-50 dark:hover:bg-emerald-900/30 hover:shadow-lg hover:-translate-y-1 transform"
+                style={{
+                  animation: `slideIn 0.5s ease-out ${idx * 0.1}s backwards`
+                }}
               >
-                {q}
+                <p className="group-hover:text-green-700 dark:group-hover:text-green-400 transition-colors">{q}</p>
               </button>
             ))}
           </div>
         </div>
-        <div className="border-t border-border p-4">
-          <form onSubmit={handleSubmit} className="flex gap-2">
+        <div className="border-t-2 border-green-100 dark:border-emerald-900/30 bg-white dark:bg-slate-900/50 backdrop-blur p-4">
+          <form onSubmit={handleSubmit} className="flex gap-2 max-w-4xl mx-auto">
             <input
               type="file"
               ref={fileInputRef}
@@ -261,83 +264,108 @@ export function ChatPanel({ conversationId, language, onConversationCreated }: C
               size="icon"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
+              className="border-2 border-green-200 dark:border-emerald-800 hover:border-green-500 hover:bg-green-50 dark:hover:bg-emerald-900/30 rounded-lg"
             >
-              <Upload className="h-4 w-4" />
+              <Upload className="h-5 w-5 text-green-600" />
             </Button>
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask about agriculture policies, schemes, laws..."
-              className="min-h-[40px] max-h-[120px] resize-none"
+              className="min-h-[45px] max-h-[120px] resize-none border-2 border-green-200 dark:border-emerald-800 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 dark:focus:ring-green-900 transition-all px-4 py-3"
               rows={1}
             />
             <Button
               type="submit"
               size="icon"
               disabled={!input.trim() || isLoading}
+              className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
             >
               {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <Send className="h-5 w-5" />
               )}
             </Button>
           </form>
         </div>
+        <style>{`
+          @keyframes slideIn {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <ScrollArea className="flex-1 p-4" ref={scrollRef as any}>
-        <div className="mx-auto max-w-2xl space-y-4">
+    <div className="flex h-full flex-col bg-gradient-to-b from-white/40 to-green-50/20 dark:from-slate-900/40 dark:to-emerald-900/10">
+      <ScrollArea className="flex-1 p-6" ref={scrollRef as any}>
+        <div className="mx-auto max-w-3xl space-y-5">
           {loadingMessages ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-green-600" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center py-12 text-sm text-gray-500 dark:text-gray-400">
               No messages yet. Start by typing a question below.
             </div>
           ) : (
-            messages.map((msg) => (
+            messages.map((msg, idx) => (
               <div
                 key={msg.id}
-                className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}
+                className={cn("flex gap-4 animate-fadeIn", msg.role === "user" ? "justify-end" : "justify-start")}
+                style={{
+                  animation: `fadeIn 0.3s ease-out`
+                }}
               >
+                {msg.role === "assistant" && (
+                  <div className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600">
+                    <Leaf className="h-4 w-4 text-white" />
+                  </div>
+                )}
                 <div
                   className={cn(
-                    "max-w-[80%] rounded-lg px-4 py-3 text-sm",
+                    "max-w-[85%] rounded-2xl px-5 py-4 text-sm shadow-md transition-all hover:shadow-lg",
                     msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card text-card-foreground border border-border"
+                      ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-3xl rounded-br-sm"
+                      : "bg-white dark:bg-slate-800/80 text-gray-900 dark:text-gray-100 border-2 border-green-100 dark:border-emerald-900/50 rounded-3xl rounded-tl-sm"
                   )}
                 >
                   {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-gray-900 dark:text-gray-100 prose-p:m-0 prose-li:m-0 prose-ul:m-0 prose-ol:m-0">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                   )}
                 </div>
               </div>
             ))
           )}
           {isLoading && (
-            <div className="flex justify-start">
-              <div className="rounded-lg border border-border bg-card px-4 py-3">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <div className="flex justify-start gap-4 animate-fadeIn">
+              <div className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-600">
+                <Leaf className="h-4 w-4 text-white" />
+              </div>
+              <div className="rounded-2xl rounded-tl-sm border-2 border-green-100 dark:border-emerald-900/50 bg-white dark:bg-slate-800/80 px-5 py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-green-600" />
               </div>
             </div>
           )}
         </div>
       </ScrollArea>
 
-      <div className="border-t border-border p-4">
-        <form onSubmit={handleSubmit} className="mx-auto flex max-w-2xl gap-2">
+      <div className="border-t-2 border-green-100 dark:border-emerald-900/30 bg-white dark:bg-slate-900/50 backdrop-blur p-4">
+        <form onSubmit={handleSubmit} className="mx-auto max-w-3xl flex gap-3">
           <input
             type="file"
             ref={fileInputRef}
@@ -351,26 +379,44 @@ export function ChatPanel({ conversationId, language, onConversationCreated }: C
             size="icon"
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
+            className="border-2 border-green-200 dark:border-emerald-800 hover:border-green-500 hover:bg-green-50 dark:hover:bg-emerald-900/30 rounded-lg h-11 w-11 flex-shrink-0 transition-all"
           >
-            <Upload className="h-4 w-4" />
+            <Upload className="h-5 w-5 text-green-600" />
           </Button>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about agriculture policies, schemes, laws..."
-            className="min-h-[40px] max-h-[120px] resize-none"
+            className="min-h-[45px] max-h-[120px] resize-none border-2 border-green-200 dark:border-emerald-800 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 dark:focus:ring-green-900 transition-all px-4 py-3 dark:bg-slate-800/50"
             rows={1}
           />
-          <Button type="submit" size="icon" disabled={!input.trim() || isLoading}>
+          <Button 
+            type="submit" 
+            size="icon" 
+            disabled={!input.trim() || isLoading}
+            className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg shadow-lg hover:shadow-xl transition-all h-11 w-11 flex-shrink-0"
+          >
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              <Send className="h-4 w-4" />
+              <Send className="h-5 w-5" />
             )}
           </Button>
         </form>
       </div>
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   );
 }
