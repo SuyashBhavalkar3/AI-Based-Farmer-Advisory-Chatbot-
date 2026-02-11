@@ -1,350 +1,266 @@
-import os, uvicorn, uuid
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
+"""Main FastAPI application - Production Ready Farmer Advisory Chatbot."""
+
+import os
+from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from dotenv import load_dotenv
-from openai import OpenAI
-from embeddings import embed_text, embed_texts
-from utils import chunk_text
-from vectorstore import VectorStore
-from pathlib import Path
-from PyPDF2 import PdfReader
-from tempfile import TemporaryDirectory
-from authenticate.models import User
-from authenticate.auth import hash_password, create_access_token
-from authenticate.dependencies import get_db
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from authenticate.auth import verify_password
-from authenticate.schemas import SignupRequest, LoginRequest
-from database import engine, Base
-from authenticate.models import User, Conversation
-from conversation.routes import router as conversation_router
-from authenticate.models import Message, Conversation
+from contextlib import asynccontextmanager
 
-# ------------------------------
-# Environment & App Setup
-# ------------------------------
-load_dotenv()
-app = FastAPI(title="Legal & Policy Assistant API")
+# Import configurations
+from config.settings import settings
+from logger.setup import app_logger, get_logger
+from database.base import init_db, get_db
+from database.models import User
+from auth.dependencies import get_current_user
+from middleware import LoggingMiddleware, ErrorHandlingMiddleware, RateLimitMiddleware
 
-# Optional: CORS
+# Import routers
+from auth.routes import router as auth_router
+from conversations.routes import router as conversations_router
+
+# Import services
+from rag.rag_service import get_rag_service
+from translation.language_detector import LanguageDetector
+from translation.translator import get_translator
+from services.farmer_advisory import FarmerAdvisoryService, SchemeAdvisoryService
+from exceptions.custom_exceptions import InvalidInputError, NotFoundError, FileUploadError, to_http_exception
+from utils.validators import Validator
+from utils.formatters import format_success_response
+
+logger = get_logger(__name__)
+
+# Lifespan event
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events."""
+    logger.info("Starting Farmer Advisory Chatbot API")
+    try:
+        init_db()
+        rag_service = get_rag_service()
+        logger.info(f"RAG Service ready: {rag_service.get_vectorstore_stats()}")
+    except Exception as e:
+        logger.error(f"Startup error: {str(e)}")
+        raise
+    
+    yield
+    
+    logger.info("Shutting down Farmer Advisory Chatbot API")
+
+# Create FastAPI app
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="AI-Based Farmer Advisory Chatbot with multilingual support",
+    lifespan=lifespan
+)
+
+# Add middleware
+app.add_middleware(RateLimitMiddleware, requests=settings.RATE_LIMIT_REQUESTS, period=settings.RATE_LIMIT_PERIOD_SECONDS)
+app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
-app.include_router(conversation_router)
+# Include routers
+app.include_router(auth_router)
+app.include_router(conversations_router)
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Request schemas
+class AdvisoryRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=1000)
+    conversation_id: int
+    language: str = Field("en", pattern="^(en|hi|mr)$")
+    include_schemes: bool = False
 
-# Persistent FAISS for preloaded legal corpus
-VECTORSTORE_PATH = Path(
-    os.getenv("VECTORSTORE_PATH", "vectorstore")
-)
-
-vectorstore = None  # Will be initialized on startup
-
-# ------------------------------
-# Pydantic Schemas
-# ------------------------------
-class PromptRequest(BaseModel):
-    prompt: str
-
-class TextRequest(BaseModel):
-    text: str
-
-class TextsRequest(BaseModel):
-    texts: list[str]
-
-class QueryRequest(BaseModel):
-    query: str
-    top_k: int = 5
-
-# ------------------------------
-# Utility Functions
-# ------------------------------
-def extract_pdf_text(file) -> str:
-    reader = PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
-    return text
-
-def ask_model(prompt: str) -> str:
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a legal assistant. Answer only using the provided context."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def build_prompt_with_history(
-            conversation_id: int,
-            user_question: str,
-            db: Session,
-            pdf_context: str = "",
-            max_history: int = 10
-        ) -> str:
-            # Fetch last N messages
-            messages = (
-                db.query(Message)
-                .filter(Message.conversation_id == conversation_id)
-                .order_by(Message.created_at.desc())
-                .limit(max_history)
-                .all()
-            )
-            messages = reversed(messages)  # oldest first
-            chat_history = "\n".join([f"{m.role}: {m.content}" for m in messages])
-
-            # Combine chat history and PDF/global RAG context
-            combined_context = "\n\n".join(filter(None, [chat_history, pdf_context]))
-
-            prompt = f"""
-        You are a helpful legal assistant. Answer only using the context below.
-
-        Conversation + Context:
-        {combined_context}
-
-        Question:
-        {user_question}
-
-        Answer in clear, simple language suitable for a non-expert:
-
-
-        Note : Summarize your answer in maximum to maximum 100 words because i am using OpenAI key And it has charges per tokens so please keep this in mind.
-        """
-            return prompt
-
-def generate_ai_conversation_title(first_message: str) -> str:
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Generate a short, clear conversation title "
-                        "from the user's message. "
-                        "Max 2 words. No punctuation. No quotes."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": first_message
-                }
-            ],
-            temperature=0.3,
-            max_tokens=10
-        )
-
-        title = response.choices[0].message.content.strip()
-
-        # ✅ Safety check
-        if not title:
-            raise ValueError("Empty title")
-
-        return title
-
-    except Exception:
-        # ✅ Guaranteed safe fallback
-        words = first_message.strip().split()
-        if len(words) >= 2:
-            return " ".join(words[:2]).capitalize()
-        elif len(words) == 1:
-            return words[0].capitalize()
-        return "Conversation"
-
-@app.on_event("startup")
-def create_tables():
-    Base.metadata.create_all(bind=engine)
-
-# ------------------------------
-# Startup Event
-# ------------------------------
-@app.on_event("startup")
-def startup_load():
-    global vectorstore
-    vectorstore = VectorStore(str(VECTORSTORE_PATH))
-    if vectorstore.index.ntotal == 0:
-        print("⚠️ Warning: FAISS index is empty")
-    else:
-        print("✅ FAISS index loaded successfully")
-
-# ------------------------------
 # Endpoints
-# ------------------------------
-@app.get("/")
-def root():
-    return {"message": "Legal & Policy Assistant API is running!"}
-
-@app.post("/authenticate/signup")
-def signup(data: SignupRequest, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == data.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    user = User(
-        full_name=data.full_name,
-        email=data.email,
-        password_hash=hash_password(data.password)
-    )
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    return {"message": "User created successfully"}
-
-@app.post("/authenticate/login")
-def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    token = create_access_token(user.email)
-
-    # ✅ Always create a new conversation on login
-    new_convo = Conversation(
-        user_id=user.id,
-        title="New Conversation"
-    )
-    db.add(new_convo)
-    db.commit()
-    db.refresh(new_convo)
-
+@app.get("/health")
+def health_check():
+    """Health check endpoint."""
     return {
-        "access_token": token,
-        "token_type": "bearer",
-        "full_name": user.full_name,
-        "new_conversation_id": new_convo.id  # Optional: frontend can highlight it
+        "status": "healthy",
+        "version": settings.APP_VERSION,
+        "environment": settings.ENVIRONMENT
     }
 
+@app.get("/")
+def root():
+    """Root endpoint."""
+    return {
+        "message": f"{settings.APP_NAME} is running!",
+        "version": settings.APP_VERSION,
+        "docs": "/docs"
+    }
 
-MAX_HISTORY = 10  # last N messages
-
-@app.post("/ask/{conversation_id}")
-def ask_with_history(
-    conversation_id: int,
-    prompt_request: PromptRequest,
-    db: Session = Depends(get_db)
+@app.post("/api/v1/advisory/ask")
+def ask_advisory(
+    request: AdvisoryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    convo = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-    if not convo:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    """Ask for farmer advisory with RAG context."""
+    try:
+        # DEBUG: Log incoming request
+        logger.info(f"[ADVISORY] Incoming request from user {current_user.email}")
+        logger.info(f"[ADVISORY] Question: {request.question}")
+        logger.info(f"[ADVISORY] Conversation ID: {request.conversation_id}")
+        logger.info(f"[ADVISORY] Language: {request.language}")
+        
+        # Import Message model
+        from database.models import Message
+        
+        # Step 1: Save user message to database
+        logger.info(f"[ADVISORY] Saving user message to database...")
+        user_message = Message(
+            conversation_id=request.conversation_id,
+            role="user",
+            content=request.question
+        )
+        db.add(user_message)
+        db.commit()
+        db.refresh(user_message)
+        logger.info(f"[ADVISORY] User message saved with ID {user_message.id}")
+        
+        # Detect language if not specified
+        if not request.language:
+            request.language = LanguageDetector.detect(request.question)
+            logger.info(f"[ADVISORY] Detected language: {request.language}")
+        
+        # Translate to English if needed
+        logger.info(f"[ADVISORY] Translating to English...")
+        translator = get_translator()
+        question_en = translator.translate_to_english(request.question, request.language)
+        logger.info(f"[ADVISORY] Translated question: {question_en}")
+        
+        # Get RAG context
+        logger.info(f"[ADVISORY] Fetching RAG context...")
+        rag_service = get_rag_service()
+        context = rag_service.get_context_string(question_en, language=request.language)
+        logger.info(f"[ADVISORY] RAG context length: {len(context) if context else 0}")
+        
+        # Get advisory
+        logger.info(f"[ADVISORY] Calling FarmerAdvisoryService...")
+        advisory_service = FarmerAdvisoryService()
+        response = advisory_service.get_advisory(question_en, language=request.language, context=context)
+        logger.info(f"[ADVISORY] Got response from service")
+        
+        # Translate response back to user's language
+        logger.info(f"[ADVISORY] Translating response back to {request.language}...")
+        response_user_lang = translator.translate_from_english(response, request.language)
+        logger.info(f"[ADVISORY] Response translated")
+        
+        # Step 2: Save assistant message to database
+        logger.info(f"[ADVISORY] Saving assistant message to database...")
+        assistant_message = Message(
+            conversation_id=request.conversation_id,
+            role="assistant",
+            content=response_user_lang
+        )
+        db.add(assistant_message)
+        db.commit()
+        db.refresh(assistant_message)
+        logger.info(f"[ADVISORY] Assistant message saved with ID {assistant_message.id}")
+        
+        # Step 3: Return response
+        logger.info(f"[ADVISORY] Returning response...")
+        return format_success_response({
+            "response": response_user_lang,
+            "original_language": request.language,
+            "context_used": bool(context),
+            "schemes": advisory_service.find_relevant_schemes(request.question) if request.include_schemes else None
+        }, {"language": request.language})
+    except (InvalidInputError, NotFoundError) as e:
+        logger.error(f"[ADVISORY] Known error: {str(e)}")
+        db.rollback()
+        raise to_http_exception(e)
+    except Exception as e:
+        logger.error(f"[ADVISORY] Unexpected error: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get advisory: {str(e)}")
 
-    # ✅ Generate AI title ONLY for first message
-    if convo.title == "New Conversation":
-        convo.title = generate_ai_conversation_title(prompt_request.prompt)
-        db.add(convo)
-
-    prompt = build_prompt_with_history(
-        conversation_id,
-        prompt_request.prompt,
-        db
-    )
-
-    answer = ask_model(prompt)
-
-    user_msg = Message(
-        conversation_id=conversation_id,
-        role="user",
-        content=prompt_request.prompt
-    )
-    assistant_msg = Message(
-        conversation_id=conversation_id,
-        role="assistant",
-        content=answer
-    )
-
-    db.add_all([user_msg, assistant_msg])
-    db.commit()
-
-    return {"response": answer}
-
-@app.post("/embed_text")
-def get_embedding(request: TextRequest):
-    embedding = embed_text(request.text)
-    return {"embedding": embedding}
-
-@app.post("/embed_texts")
-def get_embeddings(request: TextsRequest):
-    embeddings = embed_texts(request.texts)
-    return {"embeddings": embeddings}
-
-@app.post("/query_docs")
-def query_docs(request: QueryRequest):
-    if vectorstore.index.ntotal == 0:
-        raise HTTPException(status_code=500, detail="VectorStore is empty")
-    query_embedding = embed_text(request.query)
-    results = vectorstore.search(query_embedding, top_k=request.top_k)
-    return {"results": results}
-
-@app.post("/ask_pdf/{conversation_id}")
-async def ask_pdf_with_history(
-    conversation_id: int,
-    file: UploadFile = File(...),
+@app.post("/api/v1/advisory/ask-with-document")
+async def ask_with_document(
+    conversation_id: int = Form(...),
     question: str = Form(...),
-    top_k: int = Form(5),
+    language: str = Form("en"),
+    file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    convo = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-    if not convo:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    
-    # ✅ Generate AI title only once
-    if convo.title == "New Conversation":
-        convo.title = generate_ai_conversation_title(question)
-        db.add(convo)
+    """Ask advisory with uploaded document context."""
+    try:
+        # Validate inputs
+        Validator.validate_string(question, min_length=1, max_length=1000, field_name="Question")
+        
+        # Validate file
+        Validator.validate_file_size(len(file.file.read()), settings.MAX_UPLOAD_SIZE_MB)
+        file.file.seek(0)  # Reset file pointer
+        
+        file_type = Validator.validate_file_type(file.filename, settings.ALLOWED_FILE_TYPES)
+        
+        # Process document
+        from rag.document_processor import DocumentProcessor
+        file_content = await file.read()
+        document_text = DocumentProcessor.extract_text(file_content, file_type)
+        
+        # Store in RAG
+        rag_service = get_rag_service()
+        num_chunks = rag_service.process_and_store_document(document_text, language)
+        
+        # Get context from document
+        translator = get_translator()
+        question_en = translator.translate_to_english(question, language)
+        context = rag_service.get_context_string(question_en, language=language)
+        
+        # Get advisory
+        advisory_service = FarmerAdvisoryService()
+        response = advisory_service.get_advisory(question_en, language=language, context=context)
+        response_user_lang = translator.translate_from_english(response, language)
+        
+        return format_success_response({
+            "response": response_user_lang,
+            "chunks_processed": num_chunks,
+            "language": language
+        })
+    except (InvalidInputError, FileUploadError) as e:
+        raise to_http_exception(e)
+    except Exception as e:
+        logger.error(f"Document advisory error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process document")
 
+@app.get("/api/v1/advisory/schemes")
+def list_schemes():
+    """Get list of government schemes."""
+    try:
+        advisory_service = FarmerAdvisoryService()
+        schemes = advisory_service.get_government_schemes()
+        return format_success_response(schemes)
+    except Exception as e:
+        logger.error(f"Error listing schemes: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list schemes")
 
-    # Extract PDF and create temporary FAISS
-    pdf_text = extract_pdf_text(file.file)
-    pdf_chunks = chunk_text(pdf_text)
-    question_embedding = embed_text(question)
+@app.get("/api/v1/advisory/schemes/{scheme_id}")
+def get_scheme(scheme_id: str):
+    """Get specific scheme details."""
+    try:
+        scheme = SchemeAdvisoryService.explain_scheme(scheme_id)
+        if not scheme:
+            raise NotFoundError(f"Scheme {scheme_id}")
+        return format_success_response(scheme)
+    except NotFoundError as e:
+        raise to_http_exception(e)
+    except Exception as e:
+        logger.error(f"Error getting scheme: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get scheme")
 
-    if vectorstore.index.ntotal == 0:
-        legal_context = ""
-    else:
-        global_results = vectorstore.search(question_embedding, top_k=top_k)
-        legal_context = "\n\n".join(r['metadata']['text'] for r in global_results)
-
-    with TemporaryDirectory() as tmpdir:
-        temp_store = VectorStore(store_path=tmpdir)
-        for chunk in pdf_chunks:
-            temp_store.add_vector(embed_text(chunk), {"text": chunk})
-        pdf_results = temp_store.search(question_embedding, top_k=top_k)
-        pdf_context = "\n\n".join(r['metadata']['text'] for r in pdf_results)
-
-    # Combine legal + PDF context
-    combined_rag_context = "\n\n".join(filter(None, [legal_context, pdf_context]))
-
-    # Build prompt including chat history + RAG context
-    prompt = build_prompt_with_history(
-        conversation_id,
-        question,
-        db,
-        pdf_context=combined_rag_context
-    )
-
-    # Get model response
-    answer = ask_model(prompt)
-
-    # Store messages
-    user_msg = Message(conversation_id=conversation_id, role="user", content=question)
-    assistant_msg = Message(conversation_id=conversation_id, role="assistant", content=answer)
-    db.add_all([user_msg, assistant_msg])
-    db.commit()
-
-    return {"answer": answer}
+# Legacy endpoints removed - see conversation routes for conversation management
 
 if __name__ == "__main__":
+    import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=settings.DEBUG)
+

@@ -13,3 +13,6 @@ bcrypt==4.1.2
 python-docx
 pydantic[email]
 python-multipart
+pydantic-settings
+textblob
+langdetect
