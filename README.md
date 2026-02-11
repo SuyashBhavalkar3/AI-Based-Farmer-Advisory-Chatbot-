@@ -445,11 +445,9 @@ npm run build
 ##  Support
 
 For issues or questions:
-1. Check the [QUICK_START.md](QUICK_START.md) guide
-2. Check the [INTEGRATION_SUMMARY.md](INTEGRATION_SUMMARY.md) documentation
-3. Review backend logs in terminal
-4. Check browser console (F12) for errors
-5. Check Network tab for API responses
+1. Review backend logs in terminal
+2. Check browser console (F12) for errors
+3. Check Network tab for API responses
 
 ##  License
 
