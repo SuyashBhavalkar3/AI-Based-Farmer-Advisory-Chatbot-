@@ -2,7 +2,7 @@
 
 Complete frontend-backend integration with FastAPI backend and React/Vite frontend.
 
-## 🎯 Project Overview
+## Project Overview
 
 **Hacktrack** is an AI-powered chatbot assistant that helps farmers with:
 - Government schemes and subsidies information
@@ -12,7 +12,7 @@ Complete frontend-backend integration with FastAPI backend and React/Vite fronte
 - Multilingual support (English, Hindi, Marathi)
 - Document analysis via PDF upload
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -62,7 +62,7 @@ Complete frontend-backend integration with FastAPI backend and React/Vite fronte
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Backend Setup
 
@@ -96,7 +96,7 @@ npm run dev
 
 **Frontend ready at:** `http://localhost:8080`
 
-## 📋 API Endpoints
+## API Endpoints
 
 ### Authentication
 ```
@@ -120,29 +120,29 @@ POST   /api/v1/advisory/ask                 Ask question
 POST   /api/v1/advisory/ask-with-document   Ask with PDF attachment
 ```
 
-## 🔐 Security Features
+## Security Features
 
-✅ **JWT Authentication**
-- Access tokens stored in localStorage
-- Automatic token injection in all requests
-- 401 redirect on token expiry
+- JWT Authentication
+  - Access tokens stored in localStorage
+  - Automatic token injection in all requests
+  - 401 redirect on token expiry
 
-✅ **CORS Protection**
-- Whitelisted origins: localhost:8080, localhost:3000
-- Credentials allowed
-- All methods and headers allowed
+- CORS Protection
+  - Whitelisted origins: localhost:8080, localhost:3000
+  - Credentials allowed
+  - All methods and headers allowed
 
-✅ **Input Validation**
-- File type validation (.pdf only)
-- File size limit (50MB)
-- Text length limits
-- Language validation
+- Input Validation
+  - File type validation (.pdf only)
+  - File size limit (50MB)
+  - Text length limits
+  - Language validation
 
-✅ **Error Handling**
-- Global error interceptor
-- User-friendly error messages
-- Toast notifications
-- Proper HTTP status codes
+- Error Handling
+  - Global error interceptor
+  - User-friendly error messages
+  - Toast notifications
+  - Proper HTTP status codes
 
 ## 🔧 Configuration
 
@@ -218,7 +218,7 @@ Hacktrack/
 └── QUICK_START.md                   # Quick start guide
 ```
 
-## 🔄 Data Flow Examples
+## Data Flow Examples
 
 ### Login Flow
 ```
@@ -276,7 +276,7 @@ Hacktrack/
 - [ ] Theme toggle works
 - [ ] Responsive design on mobile
 
-## 🛠️ Development Commands
+## Development Commands
 
 ### Frontend
 ```bash
@@ -306,7 +306,7 @@ python -m pytest
 python -c "from database.base import init_db; init_db()"
 ```
 
-## 📊 Key Technologies
+## Key Technologies
 
 ### Frontend
 - **React 18** - UI framework
@@ -326,7 +326,7 @@ python -c "from database.base import init_db; init_db()"
 - **FAISS** - Vector search
 - **Hugging Face** - Embeddings
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
 ### Backend Connection Issues
 ```bash
@@ -363,7 +363,7 @@ localStorage.clear()
 3. Restart backend after changing CORS settings
 4. Check browser console for exact error message
 
-## 📝 Environment Variables
+## Environment Variables
 
 ### Frontend (.env)
 ```env
@@ -383,18 +383,18 @@ MAX_UPLOAD_SIZE_MB=50                      # Max file size
 CORS_ORIGINS=http://localhost:8080         # Allowed origins
 ```
 
-## 🔐 Security Notes
+## Security Notes
 
-1. **Never commit .env files** with real secrets
-2. **Change JWT_SECRET** in production
-3. **Use HTTPS** in production
-4. **Implement rate limiting** for auth endpoints
-5. **Validate all inputs** (already done)
-6. **Use environment variables** for sensitive data
-7. **Store tokens securely** (consider HttpOnly cookies)
-8. **Implement token refresh** for long sessions
+1. Never commit .env files with real secrets
+2. Change JWT_SECRET in production
+3. Use HTTPS in production
+4. Implement rate limiting for auth endpoints
+5. Validate all inputs (already done)
+6. Use environment variables for sensitive data
+7. Store tokens securely (consider HttpOnly cookies)
+8. Implement token refresh for long sessions
 
-## 📦 Dependencies
+##  Dependencies
 
 ### Frontend
 See [frontend/package.json](frontend/package.json)
@@ -412,7 +412,7 @@ See [backend/requirements.txt](backend/requirements.txt)
 - ML: Langchain, FAISS, Hugging Face
 - Utilities: Pydantic, Python-dotenv
 
-## 🚀 Deployment
+##  Deployment
 
 ### Frontend Deployment
 ```bash
@@ -442,7 +442,7 @@ npm run build
 # - Use HTTPS everywhere
 ```
 
-## 📞 Support
+##  Support
 
 For issues or questions:
 1. Check the [QUICK_START.md](QUICK_START.md) guide
@@ -451,24 +451,24 @@ For issues or questions:
 4. Check browser console (F12) for errors
 5. Check Network tab for API responses
 
-## 📄 License
+##  License
 
 [Add your license here]
 
-## ✨ Features
+##  Features
 
-✅ User authentication with JWT
-✅ Multi-language support (EN, HI, MR)
-✅ Conversation management
-✅ PDF document analysis
-✅ RAG-powered responses
-✅ Real-time chat interface
-✅ Dark/Light theme
-✅ Responsive design
-✅ Error handling and validation
-✅ Loading states and spinners
+  User authentication with JWT
+  Multi-language support (EN, HI, MR)
+  Conversation management
+  PDF document analysis
+  RAG-powered responses
+  Real-time chat interface
+  Dark/Light theme
+  Responsive design
+  Error handling and validation
+  Loading states and spinners
 
-## 🎓 Next Steps
+##  Next Steps
 
 1. Start both servers
 2. Test signup/login
@@ -479,6 +479,6 @@ For issues or questions:
 
 ---
 
-**Status:** ✅ Production Ready  
+**Status:**  Production Ready  
 **Last Updated:** 2026-02-11  
 **Maintainer:** [Your Name/Team]
