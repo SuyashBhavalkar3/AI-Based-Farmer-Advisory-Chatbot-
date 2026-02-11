@@ -1,0 +1,79 @@
+# =========================
+# Environment files
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# =========================
+# Node / Frontend (if any)
+# =========================
+node_modules/
+dist/
+build/
+
+# =========================
+# Backend specific
+# =========================
+backend/env/
+backend/.env
+backend/.env.*
+backend/node_modules/
+backend/dist/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# OS / Editor files
+# =========================
+.DS_Store
+.DS_Store?
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# Temporary / cache
+# =========================
+*.tmp
+*.swp
+.cache/
+
+backend/users.db
+backend/legal_rag.db
+backend/*.db
+
+
+# =========================
+# Data & runtime
+# =========================
+backend/data/
+backend/data/*
+
+# ✅ Allow vectorstore inside data
+!backend/data/vectorstore/
+!backend/data/vectorstore/**
+
+# HuggingFace cache
+hf_cache/
+**/hf_cache/
+
+# Vectorstore outside data (if any)
+vectorstore/
+**/vectorstore/
+
+rag_env
